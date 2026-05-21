@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Backend build
+      - name: Build backend
+        working-directory: ./backend
+        run: |
+          npm ci
+          npx tsc
+
+      # Frontend build
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          npm ci
+          npx vite build
+
+      # Deploy via SSH
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /srv/projects/absolutely-wrong
+
+            # Write GLM API key
+            echo "GLM_API_KEY=${{ secrets.GLM_API_KEY }}" > backend/.env
+
+            # Deploy backend
+            rsync -avz --delete backend/dist/ backend/dist/
+            cd backend
+            npm ci --production
+            npm rebuild better-sqlite3
+            cd ..
+
+            # Deploy frontend
+            rsync -avz --delete frontend/dist/ frontend/dist/
+
+            # Reload backend
+            systemctl --user restart proj-absolutely-wrong-backend.service 2>/dev/null || true
+            sudo systemctl reload caddy
