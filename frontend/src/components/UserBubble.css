@@ -1,0 +1,18 @@
+.user-message {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.user-message__bubble {
+  border-left: 2px solid var(--bubble-user-border);
+  color: var(--bubble-user-text);
+  font: 400 15px / 22px var(--font-ui);
+  max-width: min(80%, 420px);
+  padding-left: var(--space-3);
+}
+
+.user-message__bubble p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

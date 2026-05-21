@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { v4 as uuidv4, validate as uuidValidate } from 'uuid';
-import { callGLM } from './glm';
+import { createGLMProvider } from './llm/glm';
+import type { LlmProvider, LlmMessage, LlmRole } from './llm/types';
+import { LlmError } from './llm/types';
 import {
   getSession,
   createSession,
@@ -12,6 +14,35 @@ import {
   deleteMessages,
   deleteSession,
 } from './db';
+
+// ── LLM Provider ────────────────────────────────────────────────────────────
+
+const glmProvider: LlmProvider = createGLMProvider({
+  apiKey: process.env.GLM_API_KEY || '',
+  baseUrl: 'https://api.z.ai/api/coding/paas/v4',
+  model: 'glm-5.1',
+  timeoutMs: 15_000,
+});
+
+// ── Fallback messages (in-character, differentiated) ────────────────────────
+
+const FALLBACKS = {
+  timeout: 'Even I need a break. Come back when my circuits have cooled.',
+  network: "Your connection's wrong too. Try again when the internet cooperates.",
+  api_5xx: "I'd love to tell you why you're wrong, but my brain is on strike.",
+  api_4xx: "Something's off on my end. Don't get used to me admitting that.",
+  no_key: 'Even I need a break. Try again.',
+  unknown: "I can't even be bothered to respond to that.",
+} as const;
+
+function fallbackForError(err: unknown): string {
+  if (err instanceof LlmError) {
+    return FALLBACKS[err.kind] ?? FALLBACKS.unknown;
+  }
+  return FALLBACKS.unknown;
+}
+
+// ── Hono app ────────────────────────────────────────────────────────────────
 
 const app = new Hono();
 
@@ -138,18 +169,29 @@ app.post('/api/chat', async (c) => {
   // Save user message
   insertMessage.run(sessionId, 'user', userMessage);
 
-  // Call GLM-5.1
-  const apiKey = process.env.GLM_API_KEY;
-  if (!apiKey) {
-    return c.json({ error: 'Even I need a break. Try again.' }, 500);
+  // Build conversation history for LLM (last 20 messages)
+  const history = getMessages.all(sessionId) as Array<{
+    role: string;
+    content: string;
+  }>;
+  const llmMessages: LlmMessage[] = history
+    .slice(-20)
+    .map((m) => ({
+      role: (m.role === 'bot' ? 'assistant' : 'user') as LlmRole,
+      content: m.content,
+    }));
+
+  // Call LLM
+  if (!process.env.GLM_API_KEY) {
+    return c.json({ error: FALLBACKS.no_key }, 500);
   }
 
   let botResponse: string;
   try {
-    botResponse = await callGLM(userMessage, apiKey);
-  } catch (err: any) {
-    console.error('GLM error:', err.message);
-    botResponse = 'Even I need a break. Try again.';
+    botResponse = await glmProvider.chat(llmMessages);
+  } catch (err: unknown) {
+    console.error('LLM error:', (err as Error).message);
+    botResponse = fallbackForError(err);
   }
 
   // Save bot response

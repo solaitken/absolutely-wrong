@@ -1,0 +1,27 @@
+.empty-state {
+  align-items: center;
+  animation: empty-state-in 240ms ease-out;
+  color: var(--text-secondary);
+  display: flex;
+  flex: 1;
+  font: italic 500 17px / 26px var(--font-display);
+  justify-content: center;
+  min-height: 45dvh;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 0;
+  max-width: 320px;
+}
+
+@keyframes empty-state-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

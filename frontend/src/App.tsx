@@ -1,120 +1,131 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import './index.css'
-import './app.css'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ChatApiError, chatApi } from './api'
+import './App.css'
+import { AppHeader } from './components/AppHeader'
+import { InputArea } from './components/InputArea'
+import { MessageList } from './components/MessageList'
+import type { ChatMessage } from './types'
 
-interface Message {
-  id: number
-  role: 'user' | 'bot'
-  content: string
-  createdAt: string
+const MAX_MESSAGE_LENGTH = 2000
+
+const ERROR_COPY = {
+  tooLong: "That's too much wrong for one breath. Cut it down.",
+  rateLimit: 'Slow down. Even I have limits.',
+  server: 'Even I need a break. Try again.',
+  network: "Your connection's wrong too. Try again.",
+  initialOffline: "Even the internet is wrong today. Come back when it's cooperating.",
+} as const
+
+function createLocalMessage(role: ChatMessage['role'], content: string): ChatMessage {
+  return {
+    id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    role,
+    content,
+    createdAt: new Date().toISOString(),
+  }
 }
 
-const API_BASE = '/api'
+function copyForError(error: unknown): string {
+  if (error instanceof ChatApiError) {
+    if (error.status === 429) return ERROR_COPY.rateLimit
+    if (error.kind === 'network') return ERROR_COPY.network
+    return ERROR_COPY.server
+  }
+
+  return ERROR_COPY.server
+}
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [draft, setDraft] = useState('')
+  const sessionIdRef = useRef<string | undefined>(undefined)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isSending, setIsSending] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<ChatMessage | null>(null)
 
   useEffect(() => {
-    fetch(`${API_BASE}/chat`, { credentials: 'include' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.messages) setMessages(data.messages)
+    let isMounted = true
+
+    chatApi
+      .getChat()
+      .then((response) => {
+        if (!isMounted) return
+        setMessages(response.messages)
+        sessionIdRef.current = response.sessionId
       })
-      .catch(() => {})
-  }, [])
+      .catch((error: unknown) => {
+        if (!isMounted) return
+        setErrorMessage(createLocalMessage('bot', copyForError(error)))
+      })
+      .finally(() => {
+        if (isMounted) setIsInitialLoading(false)
+      })
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const adjustTextarea = useCallback(() => {
-    const el = textareaRef.current
-    if (el) {
-      el.style.height = 'auto'
-      el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+    return () => {
+      isMounted = false
     }
   }, [])
 
-  const handleSubmit = async () => {
-    const message = input.trim()
-    if (!message || message.length > 2000 || isLoading) return
-    setInput('')
-    setError(null)
-    const userMsg: Message = { id: Date.now(), role: 'user', content: message, createdAt: new Date().toISOString() }
-    setMessages((prev) => [...prev, userMsg])
-    setIsLoading(true)
+  const sendMessage = useCallback(async () => {
+    const content = draft.trim()
+    if (!content || isSending) return
+
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      setErrorMessage(createLocalMessage('bot', ERROR_COPY.tooLong))
+      return
+    }
+
+    setDraft('')
+    setErrorMessage(null)
+    setMessages((current) => [...current, createLocalMessage('user', content)])
+    setIsSending(true)
+
     try {
-      const res = await fetch(`${API_BASE}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ message }) })
-      const data = await res.json()
-      if (res.status === 429) { setError('Slow down. Even I have limits.'); return }
-      if (!res.ok || data.error) { setError(data.error || 'Even I need a break. Try again.'); return }
-      if (data.message) setMessages((prev) => [...prev, data.message])
-    } catch { setError('Even I need a break. Try again.') }
-    finally {
-      setIsLoading(false)
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      const response = await chatApi.sendMessage(content)
+      setMessages((current) => [...current, response.message])
+      sessionIdRef.current = response.sessionId
+    } catch (error) {
+      setErrorMessage(createLocalMessage('bot', copyForError(error)))
+    } finally {
+      setIsSending(false)
     }
-  }
+  }, [draft, isSending])
 
-  const handleClear = async () => {
-    try { await fetch(`${API_BASE}/chat`, { method: 'DELETE', credentials: 'include' }) } catch {}
-    setMessages([])
-    setError(null)
-  }
+  const clearConversation = useCallback(async () => {
+    setErrorMessage(null)
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit() }
-  }
+    try {
+      await chatApi.clearChat()
+      setMessages([])
+      sessionIdRef.current = undefined
+    } catch (error) {
+      setErrorMessage(createLocalMessage('bot', copyForError(error)))
+    }
+  }, [])
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-left">
-          <img src="/bot-avatar.svg" alt="Absolutely Wrong" className="bot-avatar" />
-          <div className="header-text">
-            <h1 className="header-title">Absolutely Wrong</h1>
-            <p className="header-subtitle">You're never right. Ever.</p>
-          </div>
-        </div>
-        <button className="btn-clear" onClick={handleClear} aria-label="Clear chat">Clear</button>
-      </header>
-      <main className="chat-area">
-        {messages.length === 0 && !isLoading && (
-          <div className="empty-state"><p>Go ahead. Try to be right about something.</p></div>
-        )}
-        <div className="message-list">
-          {messages.map((msg) => (
-            <div key={msg.id} className={`message message-${msg.role}`}>
-              {msg.role === 'bot' && <img src="/bot-avatar.svg" alt="" className="msg-avatar" />}
-              <div className={`bubble bubble-${msg.role}`}><p>{msg.content}</p></div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="message message-bot">
-              <img src="/bot-avatar.svg" alt="" className="msg-avatar" />
-              <div className="bubble bubble-bot">
-                <div className="typing-indicator"><span className="dot" /><span className="dot" /><span className="dot" /></div>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="message message-bot">
-              <img src="/bot-avatar.svg" alt="" className="msg-avatar" />
-              <div className="bubble bubble-bot bubble-error"><p>{error}</p></div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+      <a className="skip-link" href="#chat-input">
+        Skip to input
+      </a>
+
+      <AppHeader onClear={clearConversation} />
+
+      <main className="chat-shell" aria-label="Conversation">
+        <MessageList
+          errorMessage={errorMessage}
+          isInitialLoading={isInitialLoading}
+          isTyping={isSending}
+          messages={messages}
+        />
       </main>
-      <footer className="input-area">
-        <textarea ref={textareaRef} className="input-field" value={input} onChange={(e) => { setInput(e.target.value); adjustTextarea() }} onKeyDown={handleKeyDown} placeholder="Say something..." rows={1} maxLength={2000} disabled={isLoading} aria-label="Message input" />
-        <button className="btn-send" onClick={handleSubmit} disabled={!input.trim() || isLoading} aria-label="Send message">↑</button>
-      </footer>
+
+      <InputArea
+        draft={draft}
+        isSubmitting={isSending}
+        onChange={setDraft}
+        onSend={sendMessage}
+      />
     </div>
   )
 }

@@ -7,3 +7,4 @@ data/
 .ssh/
 backend/.env
 backend/data/
+frontend/live/
