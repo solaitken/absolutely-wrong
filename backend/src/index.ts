@@ -21,7 +21,7 @@ const glmProvider: LlmProvider = createGLMProvider({
   apiKey: process.env.GLM_API_KEY || '',
   baseUrl: 'https://api.z.ai/api/coding/paas/v4',
   model: 'glm-5.1',
-  timeoutMs: 15_000,
+  timeoutMs: 30_000,
 });
 
 // ── Fallback messages (in-character, differentiated) ────────────────────────

@@ -8,7 +8,7 @@ export function TypingIndicator() {
       className="typing-indicator message-enter"
       role="status"
     >
-      <img alt="" className="typing-indicator__avatar" height="32" src="/avatar.webp" width="32" />
+      <img alt="" className="typing-indicator__avatar" height="32" src="/bot-avatar.svg" width="32" />
       <div className="typing-indicator__bubble" aria-hidden="true">
         <span className="typing-indicator__dot" />
         <span className="typing-indicator__dot" />

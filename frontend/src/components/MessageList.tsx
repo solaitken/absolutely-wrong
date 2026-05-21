@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { ChatMessage } from '../types'
 import { BotBubble } from './BotBubble'
 import { EmptyState } from './EmptyState'
@@ -19,8 +19,7 @@ export function MessageList({
   isTyping,
   messages,
 }: MessageListProps) {
-  const endRef = useRef<HTMLDivElement | null>(null)
-  const prevLengthRef = useRef(0)
+  const scrollRef = useRef<HTMLElement | null>(null)
 
   const visibleMessages = useMemo(
     () => (errorMessage ? [...messages, errorMessage] : messages),
@@ -30,21 +29,21 @@ export function MessageList({
   const showEmpty = !isInitialLoading && visibleMessages.length === 0 && !isTyping
   const showError = !isInitialLoading && errorMessage && messages.length === 0
 
-  // Smooth auto-scroll when new messages arrive
-  useEffect(() => {
-    const prevLen = prevLengthRef.current
-    prevLengthRef.current = visibleMessages.length
-
-    if (visibleMessages.length > prevLen || isTyping) {
-      // Use requestAnimationFrame to let the DOM paint before scrolling
-      requestAnimationFrame(() => {
-        endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      })
+  // Auto-scroll to bottom whenever messages or typing state changes
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (el) {
+      el.scrollTop = el.scrollHeight
     }
   }, [visibleMessages.length, isTyping])
 
   return (
-    <section className="message-list" aria-label="Messages" tabIndex={-1}>
+    <section
+      aria-label="Messages"
+      className="message-list"
+      ref={scrollRef}
+      tabIndex={-1}
+    >
       {isInitialLoading ? (
         <div className="message-list__loading" aria-busy="true">
           <div className="message-list__loading-dot" />
@@ -79,8 +78,6 @@ export function MessageList({
           {isTyping ? <TypingIndicator /> : null}
         </div>
       )}
-
-      <div ref={endRef} />
     </section>
   )
 }

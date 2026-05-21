@@ -214,9 +214,9 @@ Each component lists its parts, states, and the tokens it uses. No code.
 
 ### 5.6 Avatar
 
-- Single static WebP image, pre-generated, served from `/avatar.webp`.
-- 64 × 64 px source, served at 32 × 32 px display (2× density).
-- Subject: a tightly cropped portrait of someone in a dark tailored jacket against a slightly darker background. Eyes visible. Expression: half-smirk. No glasses (cliché), no robot, no cartoon.
+- Single static SVG image, served from `/bot-avatar.svg`.
+- 128 × 128 px source, served at 32 × 32 px display.
+- Subject: a simplified character with crossed arms, raised eyebrow, condescending smirk. Warm dark palette matching the theme.
 - Treated as decorative (alt text: empty string). The bot's name in the header carries identity for screen readers.
 
 ### 5.7 Header clear-chat control
