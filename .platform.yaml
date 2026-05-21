@@ -1,0 +1,16 @@
+name: absolutely-wrong
+created: 2026-05-21
+description: "A parody chat app where AI always confidently disagrees with you"
+subdomain: absolutely-wrong
+components:
+  frontend:
+    runtime: static
+    path: ./frontend
+    static_root: ./frontend
+    route: "/*"
+  backend:
+    runtime: hono
+    path: ./backend
+    port: 30000
+    start: "node dist/index.js"
+    route: "/api/*"
